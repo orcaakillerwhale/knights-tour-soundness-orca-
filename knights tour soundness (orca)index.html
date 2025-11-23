@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Knight's Drift — 5×5 Knight's Tour (Blue Theme) — Randomized AutoSolver</title>
+<style>
+  :root{
+    --blue1:#0b4f73;
+    --blue2:#77c3e0;
+    --accent:#ffc857;
+    --white:#f7fbff;
+    --cell-size:72px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#022c3a,#061a26);color:var(--white);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:18px}
+  .wrap{width: max-content; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.15)); border-radius:14px; padding:18px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);}
+  h1{margin:0 0 6px 0;font-size:20px;text-align:center;color:var(--white)}
+  .creditHeader{font-size:12px;color:#cfeefb;opacity:0.95;text-align:center;margin-bottom:10px}
+  .sub{font-size:13px;color:rgba(255,255,255,0.85);text-align:center;margin-bottom:12px}
+  .board-wrap{display:flex;gap:14px;align-items:flex-start}
+  /* board */
+  .board{
+    display:grid;
+    grid-template-columns: repeat(5, var(--cell-size));
+    grid-template-rows: repeat(5, var(--cell-size));
+    gap:6px;
+    background:linear-gradient(180deg,#063046,#02212b);
+    padding:8px;border-radius:10px; position: relative;
+  }
+  .cell{
+    width:var(--cell-size);height:var(--cell-size);border-radius:8px;position:relative;
+    display:flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease;
+    user-select:none; font-size:22px;
+  }
+  .cell.white{background: linear-gradient(180deg,var(--white),#eaf7ff); color: #013140;}
+  .cell.blue{background: linear-gradient(180deg,var(--blue2),var(--blue1)); color: #012a35;}
+  .cell:hover{transform:translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.4)}
+  .cell.visited{opacity:0.96}
+  .cell.num { font-size:20px; z-index:2; font-weight:900; color: inherit; }
+  .cell.highlight{outline: 3px solid rgba(255,200,87,0.65); box-shadow: 0 6px 20px rgba(255,200,87,0.12) inset; }
+  .cell.invalid{opacity:0.36; filter:grayscale(30%)}
+  /* knight piece uses a div with unicode char */
+  .knight {
+    position:absolute; width:44px; height:44px; pointer-events:none; transform: translate(-50%,-50%);
+    z-index:6; display:flex;align-items:center;justify-content:center; font-size:34px;
+    transition: left .12s ease, top .12s ease;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  }
+  .knight.black{ color: #06121a; } /* knight color */
+  /* controls */
+  .controls{display:flex;flex-direction:column;gap:8px;margin-left:10px;min-width:220px}
+  .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06)); padding:10px;border-radius:10px;}
+  button{padding:8px 10px;border-radius:8px;border:none;background:var(--accent);color:#082226;font-weight:800;cursor:pointer}
+  .ghost{background:transparent;border:2px solid rgba(255,255,255,0.06);color:var(--white);padding:8px;border-radius:8px;cursor:pointer}
+  .row{display:flex;gap:8px;align-items:center}
+  .small{font-size:13px;color:rgba(255,255,255,0.85)}
+  .hintText{font-size:13px;color:#ffd;opacity:0.95;margin-top:6px}
+  @media (max-width:860px){
+    .board-wrap{flex-direction:column;align-items:center}
+    .controls{margin-left:0; width:100%}
+  }
+  .overlay{
+    position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;
+    background:linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.6)); color:var(--white); border-radius:10px; z-index:20;
+  }
+  footer.gameFooter{margin-top:10px;text-align:center;color:#cfeefb;font-size:12px;opacity:0.9}
+
+  /* STUCK BANNER */
+  .stuckBanner {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 6px;
+    z-index: 30;
+    background: linear-gradient(90deg, rgba(255,120,120,0.95), rgba(255,200,87,0.95));
+    color: #07121a;
+    padding: 10px 14px;
+    border-radius: 10px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    font-weight: 800;
+  }
+  .stuckBanner .btnSmall {
+    padding:6px 8px;border-radius:8px;border:none;background:#06121a;color:#fff;cursor:pointer;font-weight:700;
+  }
+  .stuckBanner .dismiss {
+    background: transparent; color: rgba(7,18,26,0.9); border: 2px solid rgba(7,18,26,0.12);
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <h1>Knight's Drift — 5×5 Knight's Tour</h1>
+  <div class="creditHeader">Made by Orca — Powered by Soundness Labs</div>
+  <div class="sub">Board starts blank. Place the knight to begin. Moves will be numbered 1 → 25 as you play. Randomized auto-solver gives different solutions each time.</div>
+
+  <div class="board-wrap">
+    <div class="panel" style="position:relative;">
+
+      <!-- STUCK BANNER -->
+      <div id="stuckBanner" class="stuckBanner" role="alert" aria-live="assertive">
+        <div>You are stuck bruh</div>
+        <button id="stuckUndo" class="btnSmall">Undo</button>
+        <button id="stuckHint" class="btnSmall">Hint</button>
+        <button id="stuckAuto" class="btnSmall">Auto-solve</button>
+        <button id="stuckDismiss" class="btnSmall dismiss">Dismiss</button>
+      </div>
+
+      <div id="board" class="board" aria-label="5 by 5 knight board"></div>
+
+      <!-- knight element (no external image) -->
+      <div id="knight" class="knight black" style="left:-200px;top:-200px;">♞</div>
+
+      <!-- Win overlay -->
+      <div id="winOverlay" class="overlay" style="display:none;">
+        <div style="font-size:24px;font-weight:800">🏆 You completed the tour!</div>
+        <div style="margin-top:8px" class="small">Moves: <span id="movesCountWin">0</span></div>
+        <div style="margin-top:8px" class="small">Made by Orca — Powered by Soundness Labs</div>
+        <div style="height:10px"></div>
+        <div style="display:flex;gap:8px">
+          <button id="playAgain">Play Again</button>
+          <button id="closeWin" class="ghost">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="panel">
+        <div class="row"><div class="small">Move count:</div><div style="margin-left:auto;font-weight:900" id="moveCount">0</div></div>
+        <div class="row" style="margin-top:8px"><div class="small">Visited:</div><div style="margin-left:auto;font-weight:900" id="visitedCount">0 / 25</div></div>
+        <div style="height:10px"></div>
+        <div class="row">
+          <button id="undo">Undo</button>
+          <button id="hint" style="background:#4fc3f7;color:#012; font-weight:800">Hint</button>
+        </div>
+        <div style="height:8px"></div>
+        <div class="row">
+          <button id="autosolve" style="background:#ffd36b;color:#012">Auto-solve</button>
+          <button id="restart" class="ghost">Restart</button>
+        </div>
+        <div class="hintText" id="hintText">Click any empty cell to place the knight and start (board is blank).</div>
+      </div>
+
+      <div class="panel">
+        <div class="small" style="font-weight:800;margin-bottom:6px">How to play</div>
+        <div class="small">• Click a square to place the knight and start.<br>• Move using legal knight moves (L-shape).<br>• Each visited cell will be numbered in order (1..25).<br>• Use Hint for a next move suggestion, or Auto-solve to finish the tour (randomized).</div>
+      </div>
+
+      <!-- Credits panel (replaced Share & GitHub) -->
+      <div class="panel">
+        <div class="small" style="font-weight:800;margin-bottom:6px">Credits</div>
+        <div class="small">Made by Orca — Powered by Soundness Labs</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="gameFooter">Made by Orca — Powered by Soundness Labs</footer>
+</div>
+
+<script>
+/* Knight's Drift with stuck banner
+   - shows "You are stuck bruh" if no legal moves remain before finishing
+   - banner includes Undo, Hint, Auto-solve, Dismiss
+*/
+
+// --- board setup ---------------------------------------------------------
+const SIZE = 5;
+const boardEl = document.getElementById('board');
+const knightEl = document.getElementById('knight');
+const moveCountEl = document.getElementById('moveCount');
+const visitedCountEl = document.getElementById('visitedCount');
+const hintText = document.getElementById('hintText');
+const winOverlay = document.getElementById('winOverlay');
+const movesCountWin = document.getElementById('movesCountWin');
+const playAgain = document.getElementById('playAgain');
+const closeWin = document.getElementById('closeWin');
+
+const stuckBanner = document.getElementById('stuckBanner');
+const stuckUndoBtn = document.getElementById('stuckUndo');
+const stuckHintBtn = document.getElementById('stuckHint');
+const stuckAutoBtn = document.getElementById('stuckAuto');
+const stuckDismissBtn = document.getElementById('stuckDismiss');
+
+let cells = []; // HTMLElement grid
+let visited = [];
+let visitOrder = []; // [{r,c}]
+let current = null; // {r,c} or null
+let moveCount = 0;
+
+const OFFS = [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+
+// create blank grid (no indices)
+function makeGrid() {
+  boardEl.innerHTML = '';
+  cells = [];
+  visited = Array.from({length:SIZE}, ()=>Array(SIZE).fill(false));
+  visitOrder = [];
+  current = null;
+  moveCount = 0;
+  updateHUD();
+  for (let r=0;r<SIZE;r++){
+    for (let c=0;c<SIZE;c++){
+      const div = document.createElement('div');
+      div.className = 'cell ' + (((r+c)%2===0)?'white':'blue');
+      div.dataset.r = r; div.dataset.c = c;
+      // no pre-labels — board is blank before start
+      div.innerHTML = `<div class="num"></div>`;
+      div.addEventListener('click', onCellClick);
+      boardEl.appendChild(div);
+      cells.push(div);
+    }
+  }
+  knightEl.style.left = '-200px';
+  knightEl.style.top = '-200px';
+  hintText.textContent = 'Click any empty cell to place the knight and start (board is blank).';
+  hideStuckBanner();
+}
+
+// helpers
+function inBounds(r,c){ return r>=0 && c>=0 && r<SIZE && c<SIZE; }
+function rectsEqual(a,b){ return a.r===b.r && a.c===b.c; }
+function getCellEl(r,c){ return boardEl.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`); }
+
+// compute legal unvisited moves
+function legalMoves(r,c) {
+  const out = [];
+  for (const [dx,dy] of OFFS) {
+    const nr = r - dy;
+    const nc = c + dx;
+    if (inBounds(nr,nc) && !visited[nr][nc]) out.push({r:nr,c:nc});
+  }
+  return out;
+}
+
+// update HUD
+function updateHUD(){
+  moveCountEl.textContent = moveCount;
+  visitedCountEl.textContent = `${visitOrder.length} / ${SIZE*SIZE}`;
+}
+
+// move knight visual to center of cell
+function moveKnightVisual(r,c){
+  const cell = getCellEl(r,c);
+  if (!cell) return;
+  const rect = cell.getBoundingClientRect();
+  const boardRect = boardEl.getBoundingClientRect();
+  const left = rect.left - boardRect.left + rect.width/2;
+  const top = rect.top - boardRect.top + rect.height/2;
+  knightEl.style.left = left + 'px';
+  knightEl.style.top = top + 'px';
+}
+
+// place or move (numbers are assigned only when playing)
+function onCellClick(e){
+  const r = parseInt(this.dataset.r,10);
+  const c = parseInt(this.dataset.c,10);
+  if (!current) {
+    // initial placement allowed anywhere on blank board
+    current = {r,c};
+    markVisited(r,c);
+    moveKnightVisual(r,c);
+    hintText.textContent = 'Now move using legal knight moves; each move will be numbered sequentially.';
+    checkStuck();
+    return;
+  }
+  // otherwise require legal move
+  const moves = legalMoves(current.r,current.c);
+  const ok = moves.some(m => m.r===r && m.c===c);
+  if (!ok) {
+    // small shake
+    this.style.transform = 'translateY(-3px)';
+    setTimeout(()=> this.style.transform = '', 120);
+    return;
+  }
+  current = {r,c};
+  markVisited(r,c);
+  moveKnightVisual(r,c);
+  // win?
+  if (visitOrder.length === SIZE*SIZE) {
+    showWin();
+    hideStuckBanner();
+    return;
+  }
+  checkStuck();
+}
+
+// mark visited and assign number (1..)
+function markVisited(r,c){
+  visited[r][c] = true;
+  visitOrder.push({r,c});
+  const el = getCellEl(r,c);
+  el.classList.add('visited');
+  el.querySelector('.num').textContent = visitOrder.length;
+  moveCount++;
+  updateHUD();
+  highlightValidFrom(current.r,current.c);
+}
+
+// highlight legal moves from r,c; mark other unvisited as invalid
+function highlightValidFrom(r,c){
+  cells.forEach(el => { el.classList.remove('highlight','invalid'); });
+  if (!r && r!==0 || !c && c!==0) return;
+  const moves = legalMoves(r,c);
+  const keyset = new Set(moves.map(m => `${m.r},${m.c}`));
+  cells.forEach(el => {
+    const rr = +el.dataset.r, cc = +el.dataset.c;
+    if (!visited[rr][cc]) el.classList.add('invalid');
+  });
+  for (const m of moves){
+    const el = getCellEl(m.r,m.c);
+    el.classList.add('highlight');
+    el.classList.remove('invalid');
+  }
+}
+
+// Undo last move: remove last visited number & set current to previous (or null)
+function undo(){
+  if (visitOrder.length === 0) return;
+  const removed = visitOrder.pop();
+  visited[removed.r][removed.c] = false;
+  const el = getCellEl(removed.r,removed.c);
+  el.classList.remove('visited','highlight','invalid');
+  el.querySelector('.num').textContent = '';
+  moveCount++;
+  if (visitOrder.length === 0) {
+    current = null;
+    knightEl.style.left = '-200px'; knightEl.style.top = '-200px';
+    hintText.textContent = 'Click any empty cell to place the knight and start (board is blank).';
+    hideStuckBanner();
+  } else {
+    const prev = visitOrder[visitOrder.length-1];
+    current = {r: prev.r, c: prev.c};
+    moveKnightVisual(current.r,current.c);
+    highlightValidFrom(current.r,current.c);
+    checkStuck();
+  }
+  updateHUD();
+}
+
+// Restart blank board
+function restart(){
+  makeGrid();
+}
+
+// --- Randomized solver helpers -------------------------------------------
+// We'll use randomized backtracking: shuffle neighbors before exploring.
+// Because it's randomized, it will often find different full tours each time.
+// We still use degree heuristic but with randomness to vary results.
+
+// shuffle array in-place
+function shuffle(a){
+  for (let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+// degree (unvisited count) for heuristic
+function degreeOf(r,c, vis){
+  let d = 0;
+  for (const [dx,dy] of OFFS){
+    const nr = r - dy, nc = c + dx;
+    if (inBounds(nr,nc) && !vis[nr][nc]) d++;
+  }
+  return d;
+}
+
+// Find full tour from given current and visited state (randomized)
+function findFullTourFromRandom(currentPos, visitedLocal) {
+  if (!currentPos) return null;
+  const N = SIZE, total = N*N;
+  const vis = visitedLocal.map(row=>row.slice());
+  const path = [];
+  let found = null;
+
+  function backtrack(r,c,count){
+    if (found) return true;
+    path.push({r,c});
+    vis[r][c] = true;
+    if (count === total) { found = path.slice(); return true; }
+
+    // collect neighbors
+    let nbrs = [];
+    for (const [dx,dy] of OFFS){
+      const nr = r - dy, nc = c + dx;
+      if (inBounds(nr,nc) && !vis[nr][nc]) nbrs.push({r:nr,c:nc});
+    }
+
+    // randomly perturb neighbor order but include degree heuristic
+    // compute degree and then sort but break ties by a small shuffle factor
+    nbrs = nbrs.map(n => ({...n, deg: degreeOf(n.r,n.c,vis), rnd: Math.random()}));
+    // random weighting: sometimes prefer low degree (Warnsdorff), sometimes random
+    const preferWarns = Math.random() < 0.78; // 78% of time use heuristic
+    if (preferWarns) {
+      nbrs.sort((a,b)=> a.deg - b.deg || a.r - b.r || a.c - b.c);
+      // then slightly shuffle small groups to vary paths
+      for (let i=0;i<nbrs.length;i+=3) {
+        const slice = nbrs.slice(i, i+3);
+        shuffle(slice);
+        for (let k=0;k<slice.length;k++) nbrs[i+k] = slice[k];
+      }
+    } else {
+      shuffle(nbrs);
+    }
+
+    for (const n of nbrs) {
+      if (backtrack(n.r,n.c,count+1)) return true;
+    }
+
+    vis[r][c] = false;
+    path.pop();
+    return false;
+  }
+
+  // try a few randomized restarts to increase chance of finding a solution
+  const attempts = 12; // try several randomized runs
+  for (let att=0; att<attempts && !found; att++){
+    // small reshuffle of OFFS not needed — backtrack does randomness
+    // re-init local vis and path
+    for (let rr=0; rr<N; rr++) for (let cc=0; cc<N; cc++) vis[rr][cc] = visitedLocal[rr][cc];
+    path.length = 0;
+    backtrack(currentPos.r, currentPos.c, countVisited(visitedLocal));
+  }
+  return found; // array or null
+}
+
+function countVisited(v){
+  let cnt=0;
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) if (v[r][c]) cnt++;
+  return cnt;
+}
+
+// Hint: show next move from randomly found full tour (non-destructive)
+function hintNext(){
+  if (!current) { hintText.textContent = 'Place the knight to start first.'; return; }
+  const copy = visited.map(row=>row.slice());
+  const tour = findFullTourFromRandom({r:current.r,c:current.c}, copy);
+  if (!tour) { hintText.textContent = 'No full-tour continuation found from here (try different start).'; return; }
+  if (tour.length < 2) { hintText.textContent = 'Only current cell left.'; return; }
+  const next = tour[1];
+  const el = getCellEl(next.r,next.c);
+  el.classList.add('highlight');
+  el.style.boxShadow = '0 0 0 6px rgba(255,200,87,0.28)';
+  setTimeout(()=> el.style.boxShadow = '', 1000);
+  hintText.textContent = `Hint: try that highlighted square as your next move.`;
+}
+
+// Auto-solve: compute randomized full tour and animate remaining moves
+async function autoSolve(){
+  if (!current) { hintText.textContent = 'Place the knight to start first.'; return; }
+  const copy = visited.map(row=>row.slice());
+  const tour = findFullTourFromRandom({r:current.r,c:current.c}, copy);
+  if (!tour) { hintText.textContent = 'No full-tour continuation found from here (try another start).'; return; }
+  hintText.textContent = 'Auto-solving — completing the tour now...';
+  // animate from index 1 onward (tour[0] is current)
+  for (let i=1;i<tour.length;i++){
+    const t = tour[i];
+    await sleep(220);
+    // only place if not already visited (shouldn't be)
+    if (!visited[t.r][t.c]) {
+      current = {r:t.r,c:t.c};
+      markVisited(t.r,t.c);
+      moveKnightVisual(t.r,t.c);
+    }
+  }
+  hideStuckBanner();
+}
+
+// small sleep util
+function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+// Win overlay
+function showWin(){
+  movesCountWin.textContent = moveCount;
+  winOverlay.style.display = 'flex';
+  hintText.textContent = 'Amazing! You completed the 5×5 Knight tour.';
+  hideStuckBanner();
+}
+
+// STUCK detection & banner ------------------------------------------------
+function checkStuck(){
+  // if there's no current (game not started) or already won => no stuck
+  if (!current) { hideStuckBanner(); return; }
+  if (visitOrder.length === SIZE*SIZE) { hideStuckBanner(); return; }
+  const moves = legalMoves(current.r, current.c);
+  if (moves.length === 0) {
+    showStuckBanner();
+  } else {
+    hideStuckBanner();
+  }
+}
+
+function showStuckBanner(){
+  stuckBanner.style.display = 'flex';
+}
+
+function hideStuckBanner(){
+  stuckBanner.style.display = 'none';
+}
+
+// banner actions
+stuckUndoBtn.addEventListener('click', () => {
+  undo();
+  hideStuckBanner();
+});
+stuckHintBtn.addEventListener('click', () => {
+  hintNext();
+  // keep banner visible — user might still be stuck after hint
+});
+stuckAutoBtn.addEventListener('click', async () => {
+  await autoSolve();
+  hideStuckBanner();
+});
+stuckDismissBtn.addEventListener('click', () => {
+  hideStuckBanner();
+});
+
+// UI bindings
+document.getElementById('undo').addEventListener('click', ()=> undo());
+document.getElementById('hint').addEventListener('click', () => hintNext());
+document.getElementById('restart').addEventListener('click', () => restart());
+document.getElementById('autosolve').addEventListener('click', () => autoSolve());
+playAgain.addEventListener('click', ()=> { winOverlay.style.display='none'; restart(); });
+closeWin.addEventListener('click', ()=> { winOverlay.style.display='none'; });
+
+// keyboard navigation & moving using Enter (optional)
+let cursor = {r:0,c:0};
+window.addEventListener('keydown', (e)=>{
+  if (e.key === 'ArrowUp') { cursor.r = Math.max(0, cursor.r - 1); highlightCursor(); e.preventDefault(); }
+  if (e.key === 'ArrowDown') { cursor.r = Math.min(SIZE-1, cursor.r + 1); highlightCursor(); e.preventDefault(); }
+  if (e.key === 'ArrowLeft') { cursor.c = Math.max(0, cursor.c - 1); highlightCursor(); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { cursor.c = Math.min(SIZE-1, cursor.c + 1); highlightCursor(); e.preventDefault(); }
+  if (e.key === 'Enter' || e.key === ' ') {
+    const el = getCellEl(cursor.r,cursor.c);
+    if (el) el.click();
+    e.preventDefault();
+  }
+});
+function highlightCursor(){ cells.forEach(el => el.style.outline=''); const el = getCellEl(cursor.r,cursor.c); if (el) el.style.outline = '3px solid rgba(255,255,255,0.12)'; }
+
+// start
+makeGrid();
+
+</script>
+</body>
+</html>
